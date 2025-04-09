@@ -1,0 +1,361 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template for Wild Rydes DevOps Test for Patel
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: deep9719
+  GitHubRepo:
+    Type: String
+    Default: wild-rydes-final
+  GitHubBranch:
+    Type: String
+    Default: main
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub Personal Access Token
+
+Resources:
+  # VPC and Networking
+  PatelVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: PatelWildRydesVPC
+
+  PatelInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: PatelWildRydesIGW
+
+  PatelAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref PatelVPC
+      InternetGatewayId: !Ref PatelInternetGateway
+
+  PatelPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PatelVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PatelPublicSubnet1
+
+  PatelPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PatelVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PatelPublicSubnet2
+
+  PatelRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PatelVPC
+      Tags:
+        - Key: Name
+          Value: PatelPublicRouteTable
+
+  PatelRoute:
+    Type: AWS::EC2::Route
+    DependsOn: PatelAttachGateway
+    Properties:
+      RouteTableId: !Ref PatelRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref PatelInternetGateway
+
+  PatelSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PatelPublicSubnet1
+      RouteTableId: !Ref PatelRouteTable
+
+  PatelSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PatelPublicSubnet2
+      RouteTableId: !Ref PatelRouteTable
+
+  PatelSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic
+      VpcId: !Ref PatelVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  # ECR Repository
+  PatelECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: helloworld
+
+  # ECS Cluster
+  PatelECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: PatelWildRydesCluster
+
+  # IAM Roles
+  PatelECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  PatelECSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole
+
+  PatelCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:*
+                  - logs:*
+                  - ecs:*
+                  - s3:*
+                  - cloudwatch:*
+                Resource: "*"
+
+  PatelCodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:*
+                  - ecs:*
+                  - s3:*
+                  - ecr:*
+                  - iam:PassRole
+                Resource: "*"
+
+  # ECS Task Definition
+  PatelTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: helloworld-task
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: "256"
+      Memory: "512"
+      ExecutionRoleArn: !GetAtt PatelECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt PatelECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: helloworld-container
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/helloworld:latest"
+          PortMappings:
+            - ContainerPort: 8080
+              HostPort: 8080
+          Essential: true
+
+  # Application Load Balancer
+  PatelLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+        - !Ref PatelPublicSubnet1
+        - !Ref PatelPublicSubnet2
+      SecurityGroups:
+        - !Ref PatelSecurityGroup
+
+  PatelTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref PatelVPC
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /
+
+  PatelListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref PatelLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref PatelTargetGroup
+
+  # ECS Service
+  PatelECSService:
+    Type: AWS::ECS::Service
+    DependsOn: PatelListener
+    Properties:
+      Cluster: !Ref PatelECSCluster
+      ServiceName: helloworld-service
+      TaskDefinition: !Ref PatelTaskDefinition
+      DesiredCount: 2
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref PatelPublicSubnet1
+            - !Ref PatelPublicSubnet2
+          SecurityGroups:
+            - !Ref PatelSecurityGroup
+      LoadBalancers:
+        - ContainerName: helloworld-container
+          ContainerPort: 8080
+          TargetGroupArn: !Ref PatelTargetGroup
+
+  # CodeBuild Project
+  PatelCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: PatelWildRydesCodeBuild
+      ServiceRole: !GetAtt PatelCodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REPOSITORY_URI
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/helloworld"
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yml
+
+  # CodePipeline
+  PatelCodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt PatelCodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Sub "patel-codepipeline-us-east-1-${AWS::AccountId}"
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: "1"
+              OutputArtifacts:
+                - Name: SourceArtifact
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubToken
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              Configuration:
+                ProjectName: !Ref PatelCodeBuildProject
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: ECS
+                Version: "1"
+              InputArtifacts:
+                - Name: BuildArtifact
+              Configuration:
+                ClusterName: !Ref PatelECSCluster
+                ServiceName: helloworld-service
+                FileName: imagedefinitions.json
+              RunOrder: 1
+
+  # CloudWatch Alarm for Pipeline Failures
+  PatelPipelineFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alarm for CodePipeline failures
+      Namespace: AWS/CodePipeline
+      MetricName: PipelineExecutionFailed
+      Dimensions:
+        - Name: PipelineName
+          Value: !Ref PatelCodePipeline
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions: []
+      TreatMissingData: notBreaching
+
+Outputs:
+  LoadBalancerDNS:
+    Description: URL to access the application
+    Value: !GetAtt PatelLoadBalancer.DNSName

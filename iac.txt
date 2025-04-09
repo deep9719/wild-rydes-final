@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: CloudFormation template for Wild Rydes DevOps Test for Patel
+Description: CloudFormation template for Wild Rydes DevOps Test #2 - Deep Patel (AWS Account 585768183114) - wild-rydes-final
 
 Parameters:
   GitHubOwner:
@@ -17,14 +17,8 @@ Parameters:
     Description: GitHub Personal Access Token
 
 Resources:
-  # S3 Bucket for CodePipeline Artifact
-  PatelCodePipelineArtifactBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "patel-codepipeline-us-east-1-${AWS::AccountId}"
-
   # VPC and Networking
-  PatelVPC:
+  WildRydesFinalVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
@@ -32,105 +26,159 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: PatelWildRydesVPC
+          Value: wild-rydes-final-vpc
 
-  PatelInternetGateway:
+  WildRydesFinalInternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: PatelWildRydesIGW
+          Value: wild-rydes-final-igw
 
-  PatelAttachGateway:
+  WildRydesFinalAttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref PatelVPC
-      InternetGatewayId: !Ref PatelInternetGateway
+      VpcId: !Ref WildRydesFinalVPC
+      InternetGatewayId: !Ref WildRydesFinalInternetGateway
 
-  PatelPublicSubnet1:
+  WildRydesFinalPublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref PatelVPC
+      VpcId: !Ref WildRydesFinalVPC
       CidrBlock: 10.0.1.0/24
       AvailabilityZone: !Select [0, !GetAZs ""]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: PatelPublicSubnet1
+          Value: wild-rydes-final-public-subnet1
 
-  PatelPublicSubnet2:
+  WildRydesFinalPublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref PatelVPC
+      VpcId: !Ref WildRydesFinalVPC
       CidrBlock: 10.0.2.0/24
       AvailabilityZone: !Select [1, !GetAZs ""]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: PatelPublicSubnet2
+          Value: wild-rydes-final-public-subnet2
 
-  PatelRouteTable:
-    Type: AWS::EC2::RouteTable
+  WildRydesFinalPrivateSubnet1:
+    Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref PatelVPC
+      VpcId: !Ref WildRydesFinalVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: PatelPublicRouteTable
+          Value: wild-rydes-final-private-subnet1
 
-  PatelRoute:
+  WildRydesFinalPrivateSubnet2:
+    Type: AWS::EC2:: subnet
+    Properties:
+      VpcId: !Ref WildRydesFinalVPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: wild-rydes-final-private-subnet2
+
+  WildRydesFinalRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref WildRydesFinalVPC
+      Tags:
+        - Key: Name
+          Value: wild-rydes-final-public-route-table
+
+  WildRydesFinalRoute:
     Type: AWS::EC2::Route
-    DependsOn: PatelAttachGateway
+    DependsOn: WildRydesFinalAttachGateway
     Properties:
-      RouteTableId: !Ref PatelRouteTable
+      RouteTableId: !Ref WildRydesFinalRouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref PatelInternetGateway
+      GatewayId: !Ref WildRydesFinalInternetGateway
 
-  PatelSubnetRouteTableAssociation1:
+  WildRydesFinalSubnetRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PatelPublicSubnet1
-      RouteTableId: !Ref PatelRouteTable
+      SubnetId: !Ref WildRydesFinalPublicSubnet1
+      RouteTableId: !Ref WildRydesFinalRouteTable
 
-  PatelSubnetRouteTableAssociation2:
+  WildRydesFinalSubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PatelPublicSubnet2
-      RouteTableId: !Ref PatelRouteTable
+      SubnetId: !Ref WildRydesFinalPublicSubnet2
+      RouteTableId: !Ref WildRydesFinalRouteTable
 
-  PatelSecurityGroup:
+  # Security Groups
+  WildRydesFinalALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow HTTP traffic
-      VpcId: !Ref PatelVPC
+      GroupDescription: Allow HTTP traffic to ALB for wild-rydes-final
+      VpcId: !Ref WildRydesFinalVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
 
+  WildRydesFinalECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from ALB to ECS tasks for wild-rydes-final
+      VpcId: !Ref WildRydesFinalVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref WildRydesFinalALBSecurityGroup
+
   # ECR Repository
-  PatelECRRepository:
+  WildRydesFinalECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: helloworld
+      RepositoryName: wild-rydes-final
 
-  # Application Load Balancer
-  PatelLoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  # ECS Cluster
+  WildRydesFinalECSCluster:
+    Type: AWS::ECS::Cluster
     Properties:
-      Name: PatelLoadBalancer
-      Subnets:
-        - !Ref PatelPublicSubnet1
-        - !Ref PatelPublicSubnet2
-      SecurityGroups:
-        - !Ref PatelSecurityGroup
-      LoadBalancerType: application
-      Scheme: internet-facing
+      ClusterName: wild-rydes-final-cluster
 
   # IAM Roles
-  PatelCodeBuildRole:
+  WildRydesFinalECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub wild-rydes-final-ecs-task-execution-role-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  WildRydesFinalECSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub wild-rydes-final-ecs-service-role-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole
+
+  WildRydesFinalCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub wild-rydes-final-codebuild-role-${AWS::StackName}
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -139,21 +187,25 @@ Resources:
               Service: codebuild.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: CodeBuildPolicy
+        - PolicyName: wild-rydes-final-codebuild-policy
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
                   - ecr:*
-                  - logs:*
-                  - s3:*
-                  - cloudwatch:*
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - s3:PutObject
+                  - s3:GetObject
+                  - codepipeline:*
                 Resource: "*"
 
-  PatelCodePipelineRole:
+  WildRydesFinalCodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub wild-rydes-final-codepipeline-role-${AWS::StackName}
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -162,54 +214,146 @@ Resources:
               Service: codepipeline.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: CodePipelinePolicy
+        - PolicyName: wild-rydes-final-codepipeline-policy
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
                   - codebuild:*
-                  - ecr:*
+                  - ecs:*
                   - s3:*
+                  - ecr:*
                   - iam:PassRole
                 Resource: "*"
 
-  # CodeDeploy Application and Deployment Group
-  PatelCodeDeployApplication:
-    Type: AWS::CodeDeploy::Application
+  # ECS Task Definition
+  WildRydesFinalTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
     Properties:
-      ApplicationName: PatelWildRydesApp
+      Family: wild-rydes-final-task
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: "256"
+      Memory: "512"
+      ExecutionRoleArn: !GetAtt WildRydesFinalECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt WildRydesFinalECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: wild-rydes-final-container
+          Image: !Sub "585768183114.dkr.ecr.${AWS::Region}.amazonaws.com/wild-rydes-final:latest"
+          PortMappings:
+            - ContainerPort: 8080
+              HostPort: 8080
+          Essential: true
 
-  PatelCodeDeployDeploymentGroup:
-    Type: AWS::CodeDeploy::DeploymentGroup
+  # Application Load Balancer
+  WildRydesFinalLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: WildRydesFinalAttachGateway
     Properties:
-      ApplicationName: !Ref PatelCodeDeployApplication
-      ServiceRole: !GetAtt PatelCodeBuildRole.Arn
-      DeploymentGroupName: PatelWildRydesDeploymentGroup
-      DeploymentStyle:
-        DeploymentType: IN_PLACE
-        DeploymentOption: WITH_TRAFFIC_CONTROL
-      AutoRollbackConfiguration:
-        Enabled: true
-        Events:
-          - DEPLOYMENT_FAILURE
-          - DEPLOYMENT_STOP_ON_REQUEST
-      LoadBalancerInfo:
-        ElbInfoList:
-          - Name: !Ref PatelLoadBalancer
-      EC2TagFilters:
-        - Key: Name
-          Value: EC2Instance
-          Type: KEY_AND_VALUE
+      Subnets:
+        - !Ref WildRydesFinalPublicSubnet1
+        - !Ref WildRydesFinalPublicSubnet2
+      SecurityGroups:
+        - !Ref WildRydesFinalALBSecurityGroup
+      Scheme: internet-facing
+      Type: application
+
+  WildRydesFinalTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref WildRydesFinalVPC
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /
+
+  WildRydesFinalListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref WildRydesFinalLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WildRydesFinalTargetGroup
+
+  # ECS Service
+  WildRydesFinalECSService:
+    Type: AWS::ECS::Service
+    DependsOn: WildRydesFinalListener
+    Properties:
+      Cluster: !Ref WildRydesFinalECSCluster
+      ServiceName: wild-rydes-final-service
+      TaskDefinition: !Ref WildRydesFinalTaskDefinition
+      DesiredCount: 2
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref WildRydesFinalPrivateSubnet1
+            - !Ref WildRydesFinalPrivateSubnet2
+          SecurityGroups:
+            - !Ref WildRydesFinalECSSecurityGroup
+      LoadBalancers:
+        - ContainerName: wild-rydes-final-container
+          ContainerPort: 8080
+          TargetGroupArn: !Ref WildRydesFinalTargetGroup
+
+  # S3 Bucket for CodePipeline Artifacts
+  WildRydesFinalPipelineBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "wild-rydes-final-pipeline-${AWS::Region}-${AWS::AccountId}"
+
+  # CodeBuild Project
+  WildRydesFinalCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: wild-rydes-final-codebuild
+      ServiceRole: !GetAtt WildRydesFinalCodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REPOSITORY_URI
+            Value: !Sub "585768183114.dkr.ecr.${AWS::Region}.amazonaws.com/wild-rydes-final"
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo Logging in to Amazon ECR...
+                - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPOSITORY_URI
+            build:
+              commands:
+                - echo Build started on `date`
+                - docker build -t wild-rydes-final .
+                - docker tag wild-rydes-final:latest $ECR_REPOSITORY_URI:latest
+            post_build:
+              commands:
+                - echo Pushing the Docker image...
+                - docker push $ECR_REPOSITORY_URI:latest
+                - printf '[{"name":"wild-rydes-final-container","imageUri":"%s"}]' $ECR_REPOSITORY_URI:latest > imagedefinitions.json
+          artifacts:
+            files: imagedefinitions.json
 
   # CodePipeline
-  PatelCodePipeline:
+  WildRydesFinalCodePipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      RoleArn: !GetAtt PatelCodePipelineRole.Arn
+      RoleArn: !GetAtt WildRydesFinalCodePipelineRole.Arn
       ArtifactStore:
         Type: S3
-        Location: !Ref PatelCodePipelineArtifactBucket
+        Location: !Ref WildRydesFinalPipelineBucket
       Stages:
         - Name: Source
           Actions:
@@ -240,7 +384,7 @@ Resources:
               OutputArtifacts:
                 - Name: BuildArtifact
               Configuration:
-                ProjectName: !Ref PatelCodeBuildProject
+                ProjectName: !Ref WildRydesFinalCodeBuildProject
               RunOrder: 1
         - Name: Deploy
           Actions:
@@ -248,34 +392,42 @@ Resources:
               ActionTypeId:
                 Category: Deploy
                 Owner: AWS
-                Provider: CodeDeploy
+                Provider: ECS
                 Version: "1"
               InputArtifacts:
                 - Name: BuildArtifact
               Configuration:
-                ApplicationName: !Ref PatelCodeDeployApplication
-                DeploymentGroupName: !Ref PatelCodeDeployDeploymentGroup
+                ClusterName: !Ref WildRydesFinalECSCluster
+                ServiceName: !GetAtt WildRydesFinalECSService.Name
+                FileName: imagedefinitions.json
               RunOrder: 1
 
+  # SNS Topic for CloudWatch Alarms
+  WildRydesFinalAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: wild-rydes-final-alarm-topic
+
   # CloudWatch Alarm for Pipeline Failures
-  PatelPipelineFailureAlarm:
+  WildRydesFinalPipelineFailureAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmDescription: Alarm for CodePipeline failures
+      AlarmDescription: Alarm for CodePipeline failures in wild-rydes-final
       Namespace: AWS/CodePipeline
       MetricName: PipelineExecutionFailed
       Dimensions:
         - Name: PipelineName
-          Value: !Ref PatelCodePipeline
+          Value: !Ref WildRydesFinalCodePipeline
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold
-      AlarmActions: []
+      AlarmActions:
+        - !Ref WildRydesFinalAlarmTopic
       TreatMissingData: notBreaching
 
 Outputs:
-  LoadBalancerDNS:
-    Description: URL to access the application
-    Value: !GetAtt PatelLoadBalancer.DNSName
+  WildRydesFinalLoadBalancerDNS:
+    Description: URL to access the wild-rydes-final application
+    Value: !Sub "http://${WildRydesFinalLoadBalancer.DNSName}"
